@@ -98,7 +98,7 @@ func (r *Resolver) Exchange(m *D.Msg) (msg *D.Msg, err error) {
 
 func (r *Resolver) exchange(servers []*nameserver, m *D.Msg) (msg *D.Msg, err error) {
 	in := make(chan interface{})
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*4)
 	defer cancel()
 	fast := picker.SelectFast(ctx, in)
 
@@ -108,6 +108,9 @@ func (r *Resolver) exchange(servers []*nameserver, m *D.Msg) (msg *D.Msg, err er
 		go func(s *nameserver) {
 			defer wg.Done()
 			msg, _, err := s.Client.Exchange(m, s.Address)
+			if err != nil {
+				log.Debugln("[DNS] upstream %v failed: %v", s.Address, err)
+			}
 			if err != nil || msg.Rcode != D.RcodeSuccess {
 				return
 			}
