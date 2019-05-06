@@ -13,6 +13,7 @@ import (
 	"github.com/Dreamacro/clash/common/picker"
 	"github.com/Dreamacro/clash/component/fakeip"
 	C "github.com/Dreamacro/clash/constant"
+	"github.com/Dreamacro/clash/log"
 
 	D "github.com/miekg/dns"
 	geoip2 "github.com/oschwald/geoip2-golang"
@@ -27,13 +28,14 @@ var (
 )
 
 type Resolver struct {
-	ipv6     bool
-	mapping  bool
-	fakeip   bool
-	pool     *fakeip.Pool
-	fallback []*nameserver
-	main     []*nameserver
-	cache    *cache.Cache
+	ipv6       bool
+	mapping    bool
+	fakeip     bool
+	pool       *fakeip.Pool
+	fallback   []*nameserver
+	main       []*nameserver
+	fallbackIP []*net.IPNet
+	cache      *cache.Cache
 }
 
 type result struct {
@@ -44,6 +46,16 @@ type result struct {
 func isIPRequest(q D.Question) bool {
 	if q.Qclass == D.ClassINET && (q.Qtype == D.TypeA || q.Qtype == D.TypeAAAA) {
 		return true
+	}
+	return false
+}
+
+func (r *Resolver) isIPInFallbackIP(ip net.IP) bool {
+	for _, ipNet := range r.fallbackIP {
+		if ipNet.Contains(ip) {
+			log.Debugln("[DNS] %v is in fallback ip-cidr %v, give up", ip, ipNet)
+			return true
+		}
 	}
 	return false
 }
@@ -134,7 +146,8 @@ func (r *Resolver) resolveIP(m *D.Msg) (msg *D.Msg, err error) {
 		}
 
 		if ips := r.msgToIP(res.Msg); len(ips) != 0 {
-			if record, _ := mmdb.Country(ips[0]); record.Country.IsoCode == "CN" || record.Country.IsoCode == "" {
+			record, _ := mmdb.Country(ips[0])
+			if !r.isIPInFallbackIP(ips[0]) && (record.Country.IsoCode == "CN" || record.Country.IsoCode == "") {
 				// release channel
 				go func() { <-fallbackMsg }()
 				msg = res.Msg
@@ -231,6 +244,7 @@ type Config struct {
 	IPv6           bool
 	EnhancedMode   EnhancedMode
 	Pool           *fakeip.Pool
+	FallbackIP     []*net.IPNet
 }
 
 func transform(servers []NameServer) []*nameserver {
@@ -265,6 +279,9 @@ func New(config Config) *Resolver {
 	}
 	if config.Fallback != nil {
 		r.fallback = transform(config.Fallback)
+	}
+	if config.FallbackIP != nil {
+		r.fallbackIP = config.FallbackIP
 	}
 	return r
 }

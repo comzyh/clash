@@ -119,6 +119,8 @@ experimental:
   #   - tls://dns.rubyfish.cn:853 # dns over tls
   # fallback: # concurrent request with nameserver, fallback used when GEOIP country isn't CN
   #   - tcp://1.1.1.1
+  # fallback-ip: # ips in these subnets will be considered polluted
+  #   - 240.0.0.0/4
 
 Proxy:
 

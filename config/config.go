@@ -40,6 +40,7 @@ type DNS struct {
 	IPv6         bool             `yaml:"ipv6"`
 	NameServer   []dns.NameServer `yaml:"nameserver"`
 	Fallback     []dns.NameServer `yaml:"fallback"`
+	FallbackIP   []*net.IPNet     `yaml:"fallback-ip"`
 	Listen       string           `yaml:"listen"`
 	EnhancedMode dns.EnhancedMode `yaml:"enhanced-mode"`
 	FakeIPRange  *fakeip.Pool
@@ -64,6 +65,7 @@ type rawDNS struct {
 	IPv6         bool             `yaml:"ipv6"`
 	NameServer   []string         `yaml:"nameserver"`
 	Fallback     []string         `yaml:"fallback"`
+	FallbackIP   []string         `yaml:"fallback-ip"`
 	Listen       string           `yaml:"listen"`
 	EnhancedMode dns.EnhancedMode `yaml:"enhanced-mode"`
 	FakeIPRange  string           `yaml:"fake-ip-range"`
@@ -451,6 +453,20 @@ func parseNameServer(servers []string) ([]dns.NameServer, error) {
 	return nameservers, nil
 }
 
+func parseFallbackIP(ips []string) ([]*net.IPNet, error) {
+	ipNets := []*net.IPNet{}
+
+	for idx, ip := range ips {
+		_, ipnet, err := net.ParseCIDR(ip)
+		if err != nil {
+			return nil, fmt.Errorf("DNS FallbackIP[%d] format error: %s", idx, err.Error())
+		}
+		ipNets = append(ipNets, ipnet)
+	}
+
+	return ipNets, nil
+}
+
 func parseDNS(cfg rawDNS) (*DNS, error) {
 	if cfg.Enable && len(cfg.NameServer) == 0 {
 		return nil, fmt.Errorf("If DNS configuration is turned on, NameServer cannot be empty")
@@ -481,6 +497,10 @@ func parseDNS(cfg rawDNS) (*DNS, error) {
 		}
 
 		dnsCfg.FakeIPRange = pool
+	}
+
+	if fallbackip, err := parseFallbackIP(cfg.FallbackIP); err == nil {
+		dnsCfg.FallbackIP = fallbackip
 	}
 
 	return dnsCfg, nil
