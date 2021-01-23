@@ -83,7 +83,7 @@ func (t *tunLinux) URL() string {
 
 func (t *tunLinux) RetryToOpen() {
 	log.Warnln("File is lost, retrying to open tun device %v...", t.url)
-	t.tunFile.Close()
+
 	if tunURL, err := url.Parse(t.url); err == nil {
 		_, err := t.open(*tunURL)
 		if err != nil {
@@ -109,6 +109,16 @@ func (t *tunLinux) AsLinkEndpoint() (result stack.LinkEndpoint, err error) {
 	t.wg.Add(1)
 	go func() {
 		for {
+			if t.tunFile == nil {
+				if t.autoReopen {
+					log.Warnln("tun %v is not ready, waiting...", t.name)
+					time.Sleep(time.Second * time.Duration(t.autoReopenWaitInterval))
+					t.RetryToOpen()
+					continue
+				} else {
+					break
+				}
+			}
 			packet := make([]byte, mtu)
 			n, err := t.Read(packet)
 			if err != nil {
@@ -116,8 +126,10 @@ func (t *tunLinux) AsLinkEndpoint() (result stack.LinkEndpoint, err error) {
 					log.Errorln("can not read from tun: %v", err)
 				}
 				if t.autoReopen {
-					time.Sleep(time.Second * time.Duration(t.autoReopenWaitInterval))
-					t.RetryToOpen()
+					// clean up fds
+					t.tunFile.Close()
+					unix.Close(int(t.tunFile.Fd()))
+					t.tunFile = nil
 					continue
 				} else {
 					break // by default clash will not retry to open the tun file if any error when reading the file
@@ -169,7 +181,7 @@ func (t *tunLinux) WriteNotify() {
 		buf := buffer.NewVectorisedView(len(networkHeader)+len(transportHeader)+len(data), []buffer.View{networkHeader, transportHeader, data})
 		_, err := t.Write(buf.ToView())
 		if err != nil {
-			log.Errorln("can not read from tun: %v", err)
+			log.Errorln("can not write to tun: %v", err)
 		}
 	}
 }
@@ -234,6 +246,8 @@ func (t *tunLinux) openDeviceByName(name string) (TunDevice, error) {
 		return nil, err
 	}
 
+	log.Infoln("Opened tun %v successfully", t.name)
+
 	return t, nil
 }
 
@@ -265,6 +279,8 @@ func (t *tunLinux) openDeviceByFd(fd int) (TunDevice, error) {
 	}
 	t.name = string(nullStr)
 	t.tunFile = os.NewFile(uintptr(fd), "/dev/tun")
+
+	log.Infoln("Opened tun %v successfully", fd)
 
 	return t, nil
 }
