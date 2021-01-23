@@ -9,6 +9,6 @@ import (
 	"net/url"
 )
 
-func OpenTunDevice(_ url.URL) (TunDevice, error) {
+func OpenTunDevice(_ url.URL, autoReopen bool) (TunDevice, error) {
 	return nil, errors.New("Unsupported platform " + runtime.GOOS + "/" + runtime.GOARCH)
 }

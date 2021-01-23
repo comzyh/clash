@@ -303,7 +303,7 @@ func ReCreateTun(conf config.Tun) error {
 		return nil
 	}
 	var err error
-	tunAdapter, err = tun.NewTunProxy(url)
+	tunAdapter, err = tun.NewTunProxy(url, conf.AutoReopen)
 	if err != nil {
 		return err
 	}

@@ -92,11 +92,16 @@ type ifreqAddr struct {
 var sockaddrCtlSize uintptr = 32
 
 // OpenTunDevice return a TunDevice according a URL
-func OpenTunDevice(deviceURL url.URL) (TunDevice, error) {
+func OpenTunDevice(deviceURL url.URL, autoReopen bool) (TunDevice, error) {
 	if deviceURL.Scheme != "dev" {
 		return nil, errors.New("unsupported device type " + deviceURL.Scheme)
 
 	}
+
+	if autoReopen {
+		return nil, errors.New("auto reopen feature is not supported on darwin yet.")
+	}
+
 	name := deviceURL.Host
 	// TODO: configure the MTU
 	mtu := 9000

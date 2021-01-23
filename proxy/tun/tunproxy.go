@@ -36,7 +36,7 @@ type tunAdapter struct {
 }
 
 // NewTunProxy create TunProxy under Linux OS.
-func NewTunProxy(deviceURL string) (TunAdapter, error) {
+func NewTunProxy(deviceURL string, autoReopen bool) (TunAdapter, error) {
 
 	var err error
 
@@ -45,7 +45,7 @@ func NewTunProxy(deviceURL string) (TunAdapter, error) {
 		return nil, fmt.Errorf("invalid tun device url: %v", err)
 	}
 
-	tundev, err := dev.OpenTunDevice(*url)
+	tundev, err := dev.OpenTunDevice(*url, autoReopen)
 	if err != nil {
 		return nil, fmt.Errorf("can't open tun: %v", err)
 	}

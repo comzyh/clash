@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/Dreamacro/clash/log"
@@ -34,6 +35,9 @@ type tunLinux struct {
 	linkCache *channel.Endpoint
 	mtu       int
 
+	autoReopen             bool // flag to always retry to open the tun file if the file is gone accidentially
+	autoReopenWaitInterval int  // in seconds
+
 	closed   bool
 	stopOnce sync.Once
 	wg       sync.WaitGroup // wait for goroutines to stop
@@ -42,13 +46,20 @@ type tunLinux struct {
 }
 
 // OpenTunDevice return a TunDevice according a URL
-func OpenTunDevice(deviceURL url.URL) (TunDevice, error) {
+func OpenTunDevice(deviceURL url.URL, autoReopen bool) (TunDevice, error) {
 	mtu, _ := strconv.ParseInt(deviceURL.Query().Get("mtu"), 0, 32)
 
 	t := &tunLinux{
-		url: deviceURL.String(),
-		mtu: int(mtu),
+		url:                    deviceURL.String(),
+		mtu:                    int(mtu),
+		autoReopenWaitInterval: 3,
+		autoReopen:             autoReopen,
 	}
+
+	return t.open(deviceURL)
+}
+
+func (t *tunLinux) open(deviceURL url.URL) (TunDevice, error) {
 	switch deviceURL.Scheme {
 	case "dev":
 		return t.openDeviceByName(deviceURL.Host)
@@ -68,6 +79,17 @@ func (t *tunLinux) Name() string {
 
 func (t *tunLinux) URL() string {
 	return t.url
+}
+
+func (t *tunLinux) RetryToOpen() {
+	log.Warnln("File is lost, retrying to open tun device %v...", t.url)
+	t.tunFile.Close()
+	if tunURL, err := url.Parse(t.url); err == nil {
+		_, err := t.open(*tunURL)
+		if err != nil {
+			log.Errorln("Failed to open, err: %v", err)
+		}
+	}
 }
 
 func (t *tunLinux) AsLinkEndpoint() (result stack.LinkEndpoint, err error) {
@@ -93,7 +115,14 @@ func (t *tunLinux) AsLinkEndpoint() (result stack.LinkEndpoint, err error) {
 				if !t.closed {
 					log.Errorln("can not read from tun: %v", err)
 				}
-				break
+				if t.autoReopen {
+					time.Sleep(time.Second * time.Duration(t.autoReopenWaitInterval))
+					t.RetryToOpen()
+					continue
+				} else {
+					break // by default clash will not retry to open the tun file if any error when reading the file
+				}
+
 			}
 			var p tcpip.NetworkProtocolNumber
 			switch header.IPVersion(packet) {
